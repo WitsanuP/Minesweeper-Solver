@@ -162,6 +162,7 @@ static int readCell(const Img& im, double x0, double x1, double y0, double y1, d
 // ======================= Board / Solver =======================
 struct Board {
     int R = 0, C = 0;
+    int padT = 0, padL = 0;  // จำนวนช่องปริศนาที่เติมด้านบน/ซ้าย (ใช้แปลงพิกัดตอนแจ้งเตือน)
     vector<int> st;      // COVERED / FLAG / 0..8
     vector<char> virt;   // ช่องปริศนานอกภาพ
     int id(int r, int c) const { return r * C + c; }
@@ -229,11 +230,11 @@ static vector<double> solveProb(const Board& b, bool trustFlags, double density,
                 }
             cs.need -= flags;
             if (cs.vars.empty()) {
-                if (cs.need != 0) warn.push_back("ช่อง (" + to_string(r + 1) + "," + to_string(c + 1) + ") เลขไม่ตรงกับธงรอบข้าง (OCR ผิด/ปักธงผิด?)");
+                if (cs.need != 0) warn.push_back("ช่อง (" + to_string(r - b.padT + 1) + "," + to_string(c - b.padL + 1) + ") เลขไม่ตรงกับธงรอบข้าง (OCR ผิด/ปักธงผิด?)");
                 continue;
             }
             if (cs.need < 0 || cs.need > (int)cs.vars.size()) {
-                warn.push_back("ช่อง (" + to_string(r + 1) + "," + to_string(c + 1) + ") ข้อมูลขัดแย้ง ข้ามเงื่อนไขนี้");
+                warn.push_back("ช่อง (" + to_string(r - b.padT + 1) + "," + to_string(c - b.padL + 1) + ") ข้อมูลขัดแย้ง ข้ามเงื่อนไขนี้");
                 continue;
             }
             cons.push_back(cs);
@@ -409,6 +410,7 @@ int main(int argc, char** argv) {
     // ---- 3) สร้างกระดาน + ช่องปริศนาด้านที่ภาพถูกตัด ----
     int pT = eT ? 0 : 1, pB = eB ? 0 : 1, pL = eL ? 0 : 1, pR = eR ? 0 : 1;
     Board bd;
+    bd.padT = pT; bd.padL = pL;
     bd.R = H + pT + pB;
     bd.C = W + pL + pR;
     bd.st.assign(bd.R * bd.C, COVERED);
@@ -447,7 +449,7 @@ int main(int argc, char** argv) {
         printf("%2d  ", r + 1);
         for (int c = 0; c < W; c++) {
             int i = bd.id(r + pT, c + pL), v = bd.st[i];
-            if (v == FLAG) printf("  F  ");
+            if (v == FLAG && trustFlags) printf("  F  ");
             else if (v >= 0) printf("  .  ");
             else if (!isFront[i]) printf("[%2d] ", (int)lround(prob[i] * 100));
             else if (prob[i] < 1e-9) printf("  0  ");
@@ -463,7 +465,7 @@ int main(int argc, char** argv) {
     for (int r = 0; r < H; r++)
         for (int c = 0; c < W; c++) {
             int i = bd.id(r + pT, c + pL);
-            if (bd.st[i] != COVERED) continue;
+            if (bd.st[i] != COVERED && !(bd.st[i] == FLAG && !trustFlags)) continue;
             Cand cd{r, c, prob[i], (bool)isFront[i]};
             cands.push_back(cd);
             if (prob[i] < 1e-9) safe.push_back(cd);
@@ -494,7 +496,7 @@ int main(int argc, char** argv) {
     for (int r = 0; r < H; r++)
         for (int c = 0; c < W; c++) {
             int i = bd.id(r + pT, c + pL);
-            if (bd.st[i] != COVERED) continue;
+            if (bd.st[i] != COVERED && !(bd.st[i] == FLAG && !trustFlags)) continue;
             double p = prob[i];
             int cr, cg, cb;
             if (p < 1e-9) { cr = 0; cg = 220; cb = 0; }
